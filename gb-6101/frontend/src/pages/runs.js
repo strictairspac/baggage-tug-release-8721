@@ -1,4 +1,5 @@
 import { api } from "../api/workbench.js";
+import { allocationPanel } from "../features/allocation.js";
 import { empty, pageHeading, section } from "../components/common/panel.js";
 import { status } from "../components/common/status.js";
 import { table } from "../components/common/table.js";
@@ -12,8 +13,8 @@ function reportState(run) {
     run.status === "done" ? el("a", {class: "button", href: `#evidence/${run.id}`}, "查看业务证据") : null);
 }
 
-export async function runsPage(config, route, signal) {
-  const items = await api.runs();
+export async function runsPage(config, route, signal, user) {
+  const [items, cases] = await Promise.all([api.runs(), api.cases()]);
   const latest = route.id ? await api.run(route.id, signal) : items[0];
   const detail = latest ? reportState(latest) : empty("进入资料页，选用一个业务样本并提交执行。");
   async function refresh() {
@@ -33,6 +34,7 @@ export async function runsPage(config, route, signal) {
   if (latest?.status === "queued") poll(refresh, signal);
   return el("div", {class: "page"},
     pageHeading(config.modules[2], config.parameter_label),
+    allocationPanel({cases, selectedCaseId: latest?.case_id, user, signal}),
     latest ? section(latest.case_title, detail) : detail,
     section("执行批次", items.length ? table(["资料", "编号", "参数", "状态", "提交时间"],
       items.map(run => [el("a", {"data-run": run.id, href: `#runs/${run.id}`}, run.case_title), run.id,

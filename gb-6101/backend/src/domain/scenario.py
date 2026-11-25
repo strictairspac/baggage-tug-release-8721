@@ -1,3 +1,4 @@
+from .allocation import allocate_vehicles
 from .inputs import validate
 from .release_sql import release_decisions
 
@@ -39,6 +40,41 @@ REGULAR = {
     ],
 }
 
+
+def allocation_pool():
+    """多个班组/批次共享的一组全局物理牵引车。"""
+    vehicles = [
+        {"asset": "YP-L01", "category": "电动"},
+        {"asset": "YP-L02", "category": "电动"},
+        {"asset": "YP-L03", "category": "电动"},
+        {"asset": "YP-L04", "category": "电动"},
+        {"asset": "YP-D31", "category": "柴油"},
+        {"asset": "YP-D32", "category": "柴油"},
+    ]
+    requirements = [
+        {"category": "电动", "check": "制动"},
+        {"category": "电动", "check": "牵引销"},
+        {"category": "柴油", "check": "制动"},
+    ]
+    evidence = []
+    seq = 1
+    for vehicle in vehicles:
+        checks = ("制动", "牵引销") if vehicle["category"] == "电动" else ("制动",)
+        for check in checks:
+            evidence.append({
+                "seq": seq,
+                "asset": vehicle["asset"],
+                "check": check,
+                "checked": 420,
+                "expires": 1320,
+                "status": "pass",
+            })
+            seq += 1
+    return {"vehicles": vehicles, "requirements": requirements, "evidence": evidence}
+
+
+ALLOCATION_POOL = allocation_pool()
+
 FIXTURES = [
     {"code": "YP-1124-AM", "title": "YP-1124-早班", "description": "08:00，核对 4 辆车。", "payload": REGULAR},
     {
@@ -50,6 +86,16 @@ FIXTURES = [
                 {"seq": 1, "asset": "YP-T99", "check": "牵引销", "checked": 450, "expires": 620, "status": "pass"},
             ],
         },
+    },
+    {
+        "code": "YP-1124-LA", "title": "领车席位·甲班批次",
+        "description": "6 辆牵引车在 07:00–22:00 全部必检有效，可供两班并领与补车演练。",
+        "payload": allocation_pool(),
+    },
+    {
+        "code": "YP-1124-LB", "title": "领车席位·乙班批次",
+        "description": "与甲班批次包含相同物理车号，用于验证跨交接批次的时段冲突。",
+        "payload": allocation_pool(),
     },
 ]
 
@@ -76,3 +122,8 @@ def run(payload, parameter, db):
         "metrics": {"受检数": len(rows), "可放行": released, "禁止放行": len(rows) - released},
         "rows": rows,
     }
+
+
+def allocate(payload, start=None, end=None, quantity=1, **kwargs):
+    """放行页领车的纯领域入口；数据库占用由 services.allocations 处理。"""
+    return allocate_vehicles(payload, start, end, quantity, **kwargs)
